@@ -10,30 +10,24 @@ import java.util.List;
 @Table(name = "booking")
 public class Booking {
 
+    @Column(name = "booked_at")
+    LocalDateTime bookedAt;
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
     @Version
     @Column(name = "version")
     private Long version;
-
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id")
     private User user;
-
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "show_id")
     private Show bookedShow;
-
     @OneToMany(mappedBy = "booking", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     private List<SeatAvailability> seats;
-
     @Enumerated(EnumType.STRING)
     private BookingStatus bookingStatus;
-
-    @Column(name = "booked_at")
-    LocalDateTime bookedAt;
 
     @PostLoad
     protected void onPostLoad() {

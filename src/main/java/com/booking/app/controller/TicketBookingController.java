@@ -22,7 +22,8 @@ public class TicketBookingController {
 
     /**
      * Book tickets for a user
-     * @param userId UserID from request header
+     *
+     * @param userId  UserID from request header
      * @param request BookTicketRequest containing showId and seatIds to be booked
      * @return BookTicketResponse with booking confirmation
      */

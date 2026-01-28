@@ -70,18 +70,18 @@ public class TicketBookingService {
 
         /*--- Optimistic Lock ---*/
 
-        for(int attempt = 1; attempt <= MAX_RETRIES; attempt++){
-            try{
+        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
                 return attemptBookingWithOptimsticLock(userId, request);
             } catch (OptimisticLockingFailureException | StaleObjectStateException ex) {
-                if(attempt < MAX_RETRIES){
+                if (attempt < MAX_RETRIES) {
                     logger.warn("Optimistic lock failure (attempt {}/{}), retrying - userId: {}", attempt, MAX_RETRIES, userId);
-                    try{
+                    try {
                         Thread.sleep(100L * attempt); //Exponential backoff
                     } catch (InterruptedException e) {
                         throw new RuntimeException(e);
                     }
-                }else {
+                } else {
                     logger.error("Max retry attempts exceeded - userId: {}, showId: {}", userId, request.showId());
                     throw ex;
                 }
@@ -92,6 +92,7 @@ public class TicketBookingService {
 
     /**
      * Attempt a single booking transaction. Throw exception, if optimistic lock detects concurrent modification for same seat(s).
+     *
      * @return
      */
     private BookTicketResponse attemptBookingWithOptimsticLock(Long userId, BookTicketRequest request) {
@@ -102,7 +103,7 @@ public class TicketBookingService {
                 .orElseThrow(() -> new IllegalStateException("User not found"));
 
         List<SeatAvailability> availableSeats = seatAvailabilityRepository
-            .findByShowIdAndSeatIdIn(request.showId(), request.seatIds());
+                .findByShowIdAndSeatIdIn(request.showId(), request.seatIds());
 
         if (availableSeats.size() != request.seatIds().size()) {
             logger.warn("Seat count mismatch - userId: {}, requested: {}, found: {}",
