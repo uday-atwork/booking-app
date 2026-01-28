@@ -11,3 +11,63 @@ An online movie ticket booking platform to cater B2B(theatre partners) and B2C(e
 
 #### Write Scenario
 1. Book movie tickets by selecting a theatre, timing, and preferred seats for the day.
+
+---
+
+### API Endpoints
+
+**Book Tickets**
+
+POST /v1/bookings
+
+```
+{
+    "showId": 1,
+    "seatIds": [1, 2, 3]
+}
+```
+Response:
+
+```
+{
+    "bookingId": 15,
+    "showId": 1,
+    "seatIds": [
+        1,
+        2
+    ],
+    "bookedAt": "2026-01-29T03:14:50.35751"
+}
+```
+
+**Get Movie Shows**
+
+GET /v1/movies/1/shows?city=kolkata&date=2026-02-01
+
+Response:
+```
+{
+    "movieId": 1,
+    "movieName": "Inception",
+    "date": "2026-02-01",
+    "city": "kolkata",
+    "theatres": [
+        {
+            "theatreId": 1,
+            "theatreName": "PVR City Centre",
+            "shows": [
+                {
+                    "showId": 1,
+                    "startTime": "18:00:00",
+                    "endTime": "21:00:00"
+                },
+                {
+                    "showId": 5,
+                    "startTime": "15:00:00",
+                    "endTime": "17:30:00"
+                }
+            ]
+        }
+    ]
+}
+```
