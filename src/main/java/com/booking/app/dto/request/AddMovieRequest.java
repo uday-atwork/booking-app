@@ -6,11 +6,11 @@ import com.booking.app.constant.Language;
 import java.time.LocalDate;
 import java.util.List;
 
-public class AddMovieRequest {
-    private String name;
-    private LocalDate releaseDate;
-    private List<String> castMembers;
-    private List<Genre> genres;
-    private List<Language> languages;
-    private float duration;
+public record AddMovieRequest(
+        String name,
+        LocalDate releaseDate,
+        List<String> castMembers,
+        List<Genre> genres,
+        List<Language> languages,
+        float duration) {
 }

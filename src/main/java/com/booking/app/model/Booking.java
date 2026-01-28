@@ -10,25 +10,21 @@ import java.util.List;
 @Table(name = "booking")
 public class Booking {
 
+    LocalDateTime bookedAt;
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id")
     private User user;
-
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "show_id")
     private Show bookedShow;
-
     @OneToMany
+    @JoinColumn(name = "booking_id")
     private List<ShowSeatAvailability> seats;
-
     @Enumerated(EnumType.STRING)
     private BookingStatus bookingStatus;
-
-    LocalDateTime bookedAt;
 
     public Long getId() {
         return id;

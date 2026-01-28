@@ -4,4 +4,5 @@ import java.time.LocalTime;
 
 public record ShowTimeDto(Long showId,
                           LocalTime startTime,
-                          LocalTime endTime){}
+                          LocalTime endTime) {
+}

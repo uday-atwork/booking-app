@@ -7,4 +7,5 @@ public record MovieShowResponse(Long movieId,
                                 String movieName,
                                 LocalDate date,
                                 String city,
-                                List<TheatreShowDto> theatres){}
+                                List<TheatreShowDto> theatres) {
+}

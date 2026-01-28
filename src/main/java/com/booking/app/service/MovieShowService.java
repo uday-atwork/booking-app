@@ -5,9 +5,9 @@ import com.booking.app.dto.response.ShowTimeDto;
 import com.booking.app.dto.response.TheatreShowDto;
 import com.booking.app.model.Show;
 import com.booking.app.model.Theatre;
+import com.booking.app.repository.ShowRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.booking.app.repository.ShowRepository;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -20,7 +20,7 @@ public class MovieShowService {
 
     private final ShowRepository showRepository;
 
-    MovieShowService(ShowRepository showRepository){
+    MovieShowService(ShowRepository showRepository) {
         this.showRepository = showRepository;
     }
 
@@ -34,7 +34,7 @@ public class MovieShowService {
     public MovieShowResponse getMovieShows(Long movieId, String city, LocalDate date) {
         List<Show> showList = showRepository.findByMovieIdAndTheatreCityIgnoreCaseAndShowDate(movieId, city, date);
 
-        if (showList.isEmpty()){
+        if (showList.isEmpty()) {
             return null;
         }
 

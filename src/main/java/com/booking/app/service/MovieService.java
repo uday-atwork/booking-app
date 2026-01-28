@@ -1,9 +1,9 @@
 package com.booking.app.service;
 
-import jakarta.transaction.Transactional;
-import org.springframework.stereotype.Service;
 import com.booking.app.repository.MovieRepository;
 import com.booking.app.repository.TheatreRepository;
+import jakarta.transaction.Transactional;
+import org.springframework.stereotype.Service;
 
 @Service
 @Transactional

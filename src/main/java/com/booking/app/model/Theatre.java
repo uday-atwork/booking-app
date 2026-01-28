@@ -2,8 +2,6 @@ package com.booking.app.model;
 
 import jakarta.persistence.*;
 
-import java.util.List;
-
 @Entity
 @Table(name = "theatre")
 public class Theatre {
