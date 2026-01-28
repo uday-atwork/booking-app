@@ -3,12 +3,14 @@ package com.booking.app.model;
 import com.booking.app.constant.SeatStatus;
 import jakarta.persistence.*;
 
+import java.time.LocalDateTime;
+
 /**
  * State of a seat for a given show(scheduled screening of a movie at a given theater on a given date and time).
  */
 @Entity
 @Table(name = "seat_availability")
-public class ShowSeatAvailability {
+public class SeatAvailability {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -23,7 +25,10 @@ public class ShowSeatAvailability {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
-    private SeatStatus seatStatus;
+    private SeatStatus seatStatus = SeatStatus.AVAILABLE;
+
+    @Column(name="updated_at")
+    private LocalDateTime updatedAt;
 
     public Long getId() {
         return id;
@@ -55,5 +60,13 @@ public class ShowSeatAvailability {
 
     public void setSeatStatus(SeatStatus seatStatus) {
         this.seatStatus = seatStatus;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
     }
 }

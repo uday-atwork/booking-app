@@ -10,21 +10,27 @@ import java.util.List;
 @Table(name = "booking")
 public class Booking {
 
-    LocalDateTime bookedAt;
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id")
     private User user;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "show_id")
     private Show bookedShow;
+
     @OneToMany
     @JoinColumn(name = "booking_id")
-    private List<ShowSeatAvailability> seats;
+    private List<SeatAvailability> seats;
+
     @Enumerated(EnumType.STRING)
     private BookingStatus bookingStatus;
+
+    @Column(name = "booked_at")
+    LocalDateTime bookedAt;
 
     public Long getId() {
         return id;
@@ -50,11 +56,11 @@ public class Booking {
         this.bookedShow = bookedShow;
     }
 
-    public List<ShowSeatAvailability> getSeats() {
+    public List<SeatAvailability> getSeats() {
         return seats;
     }
 
-    public void setSeats(List<ShowSeatAvailability> seats) {
+    public void setSeats(List<SeatAvailability> seats) {
         this.seats = seats;
     }
 

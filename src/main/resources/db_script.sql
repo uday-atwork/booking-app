@@ -127,3 +127,22 @@ VALUES
 
 -- Different movie, same city (should NOT appear for movieId=1)
     (2, 1, '2026-02-01', '21:00', '23:45');
+
+
+
+INSERT INTO seat_availability (show_id, seat_id, status)
+VALUES
+-- Show 1 (Theatre 1)
+(1, 1, 'AVAILABLE'),
+(1, 2, 'AVAILABLE'),
+(1, 3, 'BOOKED'),
+
+-- Show 2 (Theatre 1)
+(2, 1, 'AVAILABLE'),
+(2, 2, 'LOCKED'),
+(2, 3, 'AVAILABLE'),
+
+-- Show 3 (Theatre 2)
+(3, 4, 'AVAILABLE'),
+(3, 5, 'AVAILABLE'),
+(3, 6, 'AVAILABLE');
