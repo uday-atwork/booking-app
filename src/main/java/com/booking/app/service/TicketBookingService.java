@@ -12,8 +12,10 @@ import com.booking.app.repository.SeatAvailabilityRepository;
 import com.booking.app.repository.SeatBookingRepository;
 import com.booking.app.repository.ShowRepository;
 import com.booking.app.repository.UserRepository;
+import org.hibernate.StaleObjectStateException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +26,7 @@ import java.util.List;
 @Service
 public class TicketBookingService {
     private static final Logger logger = LoggerFactory.getLogger(TicketBookingService.class);
+    private static final int MAX_RETRIES = 3;
 
     private final SeatAvailabilityRepository seatAvailabilityRepository;
     private final ShowRepository showRepository;
@@ -46,6 +49,9 @@ public class TicketBookingService {
      */
     @Transactional
     public BookTicketResponse bookTickets(Long userId, BookTicketRequest request) {
+
+        /**--- Pessimistic Lock ---**/
+        /*
         logger.info("Starting ticket booking - userId: {}, showId: {}, seatIds: {}", userId, request.showId(), request.seatIds());
         try {
             lockAndReserveSeats(userId, request);
@@ -60,7 +66,82 @@ public class TicketBookingService {
             logger.error("Unexpected error during ticket booking - userId: {}, showId: {}", userId, request.showId(), ex);
             throw ex;
         }
+        */
 
+        /*--- Optimistic Lock ---*/
+
+        for(int attempt = 1; attempt <= MAX_RETRIES; attempt++){
+            try{
+                return attemptBookingWithOptimsticLock(userId, request);
+            } catch (OptimisticLockingFailureException | StaleObjectStateException ex) {
+                if(attempt < MAX_RETRIES){
+                    logger.warn("Optimistic lock failure (attempt {}/{}), retrying - userId: {}", attempt, MAX_RETRIES, userId);
+                    try{
+                        Thread.sleep(100L * attempt); //Exponential backoff
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+                }else {
+                    logger.error("Max retry attempts exceeded - userId: {}, showId: {}", userId, request.showId());
+                    throw ex;
+                }
+            }
+        }
+        throw new RuntimeException("Booking failed unexpectedly");
+    }
+
+    /**
+     * Attempt a single booking transaction. Throw exception, if optimistic lock detects concurrent modification for same seat(s).
+     * @return
+     */
+    private BookTicketResponse attemptBookingWithOptimsticLock(Long userId, BookTicketRequest request) {
+        Show show = showRepository.findById(request.showId())
+                .orElseThrow(() -> new IllegalStateException("Show not found!"));
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalStateException("User not found"));
+
+        List<SeatAvailability> availableSeats = seatAvailabilityRepository
+            .findByShowIdAndSeatIdIn(request.showId(), request.seatIds());
+
+        if (availableSeats.size() != request.seatIds().size()) {
+            logger.warn("Seat count mismatch - userId: {}, requested: {}, found: {}",
+                    userId, request.seatIds().size(), availableSeats.size());
+            throw new IllegalStateException("Selected number of seats are not available!");
+        }
+
+        // Validate all the seats are AVAILABLE
+        for (SeatAvailability seat : availableSeats) {
+            if (seat.getSeatStatus() != SeatStatus.AVAILABLE) {
+                logger.warn("Seat not available - userId: {}, seatId: {}, status: {}", userId, seat.getSeat().getId(), seat.getSeatStatus());
+                throw new IllegalStateException("One or more seats are not vacant!");
+            }
+        }
+
+        logger.debug("All seats validated as available - userId: {}, count: {}", userId, availableSeats.size());
+
+        // Create new booking
+        Booking booking = new Booking();
+        booking.setBookedShow(show);
+        booking.setUser(user);
+        booking.setSeats(availableSeats);
+        booking.setBookingStatus(BookingStatus.CONFIRMED);
+        booking.setBookedAt(LocalDateTime.now());
+
+        availableSeats.forEach(seat -> {
+            seat.setSeatStatus(SeatStatus.BOOKED);
+            seat.setUpdatedAt(LocalDateTime.now());
+            seat.setBooking(booking);
+        });
+
+        Booking savedBooking = bookingRepository.save(booking); // Save to db
+        logger.info("Booking created successfully - bookingId: {}, userId: {}, version: {}", savedBooking.getId(), userId, savedBooking.getVersion());
+        return new BookTicketResponse(
+                savedBooking.getId(),
+                show.getId(),
+                savedBooking.getSeats().stream().map(seat -> seat.getSeat().getId()).toList(),
+                savedBooking.getBookedAt()
+        );
     }
 
 
