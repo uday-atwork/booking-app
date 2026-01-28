@@ -27,7 +27,7 @@ public class SeatAvailability {
     @Column(name = "status", nullable = false)
     private SeatStatus seatStatus = SeatStatus.AVAILABLE;
 
-    @Column(name="updated_at")
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
     public Long getId() {

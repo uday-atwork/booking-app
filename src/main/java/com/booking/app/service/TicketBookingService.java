@@ -12,6 +12,8 @@ import com.booking.app.repository.SeatAvailabilityRepository;
 import com.booking.app.repository.SeatBookingRepository;
 import com.booking.app.repository.ShowRepository;
 import com.booking.app.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +23,8 @@ import java.util.List;
 
 @Service
 public class TicketBookingService {
+    private static final Logger logger = LoggerFactory.getLogger(TicketBookingService.class);
+
     private final SeatAvailabilityRepository seatAvailabilityRepository;
     private final ShowRepository showRepository;
     private final UserRepository userRepository;
@@ -33,39 +37,61 @@ public class TicketBookingService {
         this.bookingRepository = bookingRepository;
     }
 
-
+    /**
+     * Book tickets
+     *
+     * @param userId
+     * @param request
+     * @return
+     */
     @Transactional
     public BookTicketResponse bookTickets(Long userId, BookTicketRequest request) {
-
-        List<SeatAvailability> lockedSeats = lockAndReserveSeats(userId, request);
-
-        // TODO: Remove this code! For simulation only.
+        logger.info("Starting ticket booking - userId: {}, showId: {}, seatIds: {}", userId, request.showId(), request.seatIds());
         try {
-            Thread.sleep(20_000);
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Booking interrupted!");
+            lockAndReserveSeats(userId, request);
+            BookTicketResponse response = confirmAndBookSeats(userId, request);
+            logger.info("Ticket booking completed successfully - userId: {}, bookingId: {}, seatIds: {}",
+                    userId, response.bookingId(), response.seatIds());
+            return response;
+        } catch (IllegalStateException ex) {
+            logger.warn("Ticket booking failed - userId: {}, showId: {}, reason: {}", userId, request.showId(), ex.getMessage());
+            throw ex;
+        } catch (Exception ex) {
+            logger.error("Unexpected error during ticket booking - userId: {}, showId: {}", userId, request.showId(), ex);
+            throw ex;
         }
 
-        return confirmAndBookSeats(userId, request, lockedSeats);
     }
 
 
+    /**
+     * Lock and reserve seats for booking
+     *
+     * @param userId  User requesting the booking
+     * @param request BookTicketRequest with details of the seat to be booked
+     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    private List<SeatAvailability> lockAndReserveSeats(Long userId, BookTicketRequest request) {
+    private void lockAndReserveSeats(Long userId, BookTicketRequest request) {
 
         List<SeatAvailability> availableSeats = seatAvailabilityRepository.findByShowIdAndSeatIdIn(request.showId(), request.seatIds());
+        logger.debug("Retrieved {} seat availability records for {} requested seats",
+                availableSeats.size(), request.seatIds().size());
 
         if (availableSeats.size() != request.seatIds().size()) {
+            logger.warn("Seat count mismatch - userId: {}, requested: {}, found: {}", userId, request.seatIds().size(), availableSeats.size());
+
             throw new IllegalStateException("Selected number of seats are not available. Try with a lesser number!");
         }
 
-        //Validate availability
+        //Validate seat availability
         for (SeatAvailability seat : availableSeats) {
             if (seat.getSeatStatus() != SeatStatus.AVAILABLE) {
+                logger.warn("Seat not available - userId: {}, seatId: {}, status: {}", userId, seat.getSeat().getId(), seat.getSeatStatus());
                 throw new IllegalStateException("One or more seats are not vacant. Please try again!");
             }
         }
+
+        logger.debug("All seats validated as available - userId: {}, count: {}", userId, availableSeats.size());
 
         // Mark available seat(s) as locked
         availableSeats.forEach(seat -> {
@@ -76,46 +102,63 @@ public class TicketBookingService {
         // Explicit flush to ensure LOCKED status is persisted
         seatAvailabilityRepository.saveAll(availableSeats);
         seatAvailabilityRepository.flush(); //TODO: Remove this line
-        System.out.println("Seats marked as LOCKED and flushed to DB");
+        logger.info("Seats locked and persisted - userId: {}, count: {}", userId, availableSeats.size());
         // Transaction commits here — LOCKED status now visible in DB
-
-        return availableSeats;
     }
 
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     private BookTicketResponse confirmAndBookSeats(Long userId, BookTicketRequest request) {
+        try {
+            Show show = showRepository.findById(request.showId()).orElseThrow(() -> {
+                logger.error("Show not found - showId: {}, userId: {}", request.showId(), userId);
+                return new IllegalStateException("Show not found!");
+            });
 
-        Show show = showRepository.findById(request.showId()).orElseThrow(() -> new IllegalStateException("Show not found!"));
+            User user = userRepository.findById(userId).orElseThrow(() -> {
+                logger.error("User not found - userId: {}", userId);
+                return new IllegalStateException("User not found");
+            });
 
-        User user = userRepository.findById(userId).orElseThrow(() -> new IllegalStateException("User not found"));
+            //Re-fetch seats
+            List<SeatAvailability> seats = seatAvailabilityRepository.findByShowIdAndSeatIdIn(request.showId(), request.seatIds());
 
-        //Re-fetch seats
-        List<SeatAvailability> seats = seatAvailabilityRepository.findByShowIdAndSeatIdIn(request.showId(), request.seatIds());
+            // Mark locked seat(s) as booked
+            seats.forEach(seat -> {
+                seat.setSeatStatus(SeatStatus.BOOKED);
+                seat.setUpdatedAt(LocalDateTime.now());
+            });
+            seatAvailabilityRepository.saveAll(seats);
+            logger.debug("Seats marked as BOOKED - userId: {}, count: {}", userId, seats.size());
 
-        // Mark locked seat(s) as booked
-        seats.forEach(seat -> {
-            seat.setSeatStatus(SeatStatus.BOOKED);
-            seat.setUpdatedAt(LocalDateTime.now());
-        });
-        seatAvailabilityRepository.saveAll(seats);
 
-        //Create booking
-        Booking booking = new Booking();
-        booking.setBookedShow(show);
-        booking.setSeats(seats);
-        booking.setUser(user);
-        booking.setBookedAt(LocalDateTime.now());
-        booking.setBookingStatus(BookingStatus.CONFIRMED);
+            //Create booking
+            Booking booking = new Booking();
+            booking.setBookedShow(show);
+            booking.setSeats(seats);
+            booking.setUser(user);
+            booking.setBookedAt(LocalDateTime.now());
+            booking.setBookingStatus(BookingStatus.CONFIRMED);
 
-        Booking savedBooking = bookingRepository.save(booking);
-        bookingRepository.flush();
+            Booking savedBooking = bookingRepository.save(booking);
+            bookingRepository.flush();
+            logger.info("Booking confirmed - bookingId: {}, userId: {}, showId: {}, seatCount: {}",
+                    savedBooking.getId(), userId, show.getId(), seats.size());
 
-        return new BookTicketResponse(
-                savedBooking.getId(),
-                show.getId(),
-                seats.stream().map(seat -> seat.getSeat().getId()).toList(),
-                savedBooking.getBookedAt()
-        );
+            return new BookTicketResponse(
+                    savedBooking.getId(),
+                    show.getId(),
+                    seats.stream().map(seat -> seat.getSeat().getId()).toList(),
+                    savedBooking.getBookedAt()
+            );
+        } catch (IllegalStateException ex) {
+            logger.warn("Failed to confirm booking - userId: {}, showId: {}, error: {}",
+                    userId, request.showId(), ex.getMessage());
+            throw ex;
+        } catch (Exception ex) {
+            logger.error("Unexpected error while confirming booking - userId: {}, showId: {}",
+                    userId, request.showId(), ex);
+            throw ex;
+        }
     }
 }

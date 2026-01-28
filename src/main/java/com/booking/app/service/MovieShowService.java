@@ -6,6 +6,8 @@ import com.booking.app.dto.response.TheatreShowDto;
 import com.booking.app.model.Show;
 import com.booking.app.model.Theatre;
 import com.booking.app.repository.ShowRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +19,8 @@ import java.util.stream.Collectors;
 @Service
 @Transactional(readOnly = true)
 public class MovieShowService {
+
+    private static final Logger logger = LoggerFactory.getLogger(MovieShowService.class);
 
     private final ShowRepository showRepository;
 
@@ -32,34 +36,44 @@ public class MovieShowService {
      * @return
      */
     public MovieShowResponse getMovieShows(Long movieId, String city, LocalDate date) {
-        List<Show> showList = showRepository.findByMovieIdAndTheatreCityIgnoreCaseAndShowDate(movieId, city, date);
+        try {
+            logger.info("Fetching movie shows - movieId: {}, city: {}, date: {}", movieId, city, date);
+            List<Show> showList = showRepository.findByMovieIdAndTheatreCityIgnoreCaseAndShowDate(movieId, city, date);
 
-        if (showList.isEmpty()) {
-            return null;
+            if (showList.isEmpty()) {
+                logger.warn("No shows found for movieId: {}, city: {}, date: {}", movieId, city, date);
+                return null;
+            }
+            logger.debug("Found {} shows for movieId: {} in city: {} on date: {}", showList.size(), movieId, city, date);
+
+            String movieName = showList.get(0).getMovie().getName();
+
+            Map<Theatre, List<Show>> theatreShows = showList.stream().collect(Collectors.groupingBy(Show::getTheatre));
+            logger.debug("Grouped shows by {} theatres", theatreShows.size());
+
+            List<TheatreShowDto> theatreShowDtos = theatreShows.entrySet().stream().map(entry -> {
+                Theatre theatre = entry.getKey(); //Theatre
+                logger.debug("Processing theatre: {} with {} shows", theatre.getTheatreName(), entry.getValue().size());
+
+                List<ShowTimeDto> showTimes = entry.getValue().stream().map(show -> new ShowTimeDto(show.getId(),
+                        show.getStartTime(),
+                        show.getEndTime())).collect(Collectors.toUnmodifiableList());
+
+                return new TheatreShowDto(theatre.getId(),
+                        theatre.getTheatreName(),
+                        showTimes);
+            }).toList();
+
+            return new MovieShowResponse(
+                    movieId,
+                    movieName,
+                    date,
+                    city,
+                    theatreShowDtos
+            );
+        } catch (Exception ex) {
+            logger.error("Error fetching movie shows for movieId: {}, city: {}, date: {}", movieId, city, date, ex);
+            throw ex;
         }
-
-        String movieName = showList.get(0).getMovie().getName();
-
-        Map<Theatre, List<Show>> theatreShows = showList.stream().collect(Collectors.groupingBy(Show::getTheatre));
-
-        List<TheatreShowDto> theatreShowDtos = theatreShows.entrySet().stream().map(entry -> {
-            Theatre theatre = entry.getKey(); //Theatre
-
-            List<ShowTimeDto> showTimes = entry.getValue().stream().map(show -> new ShowTimeDto(show.getId(),
-                    show.getStartTime(),
-                    show.getEndTime())).collect(Collectors.toUnmodifiableList());
-
-            return new TheatreShowDto(theatre.getId(),
-                    theatre.getTheatreName(),
-                    showTimes);
-        }).toList();
-
-        return new MovieShowResponse(
-                movieId,
-                movieName,
-                date,
-                city,
-                theatreShowDtos
-        );
     }
 }
