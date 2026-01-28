@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import org.hibernate.usertype.UserType;
 
 @Entity
-@Table(name = "USER")
+@Table(name = "user")
 public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
