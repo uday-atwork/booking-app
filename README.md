@@ -89,7 +89,7 @@ Relative Path: resources/static/movie-ticket-booking-app-erd.png
 
 **High Level System Diagram**
 
-URL: https://excalidraw.com/#json=rQZvKtkyGwt0_5NQCNWQT,fxgBzh7gbIRS92Rkp-hifA
+URL: https://excalidraw.com/#json=848s9oBewapcNeSxpOGd6,jba7xo_JwLqYXSAeDJ92BQ
 
 ---
 
