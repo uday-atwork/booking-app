@@ -202,7 +202,6 @@ public class TicketBookingService {
     }
 
 
-
     /*** -- Pessimistic Locking --- ***/
     /**
      * Lock and reserve seats for booking (for pessimistic locking)

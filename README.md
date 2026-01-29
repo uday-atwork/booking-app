@@ -75,3 +75,28 @@ Response:
     "bookedAt": "2026-01-29T03:14:50.35751"
 }
 ```
+
+
+---
+
+**ERD**
+
+![ERD-Ticket Booking App](resources/static/movie-ticket-booking-app-erd.png)
+
+Relative Path: resources/static/movie-ticket-booking-app-erd.png
+
+---
+
+**High Level System Diagram**
+
+URL: https://excalidraw.com/#json=rQZvKtkyGwt0_5NQCNWQT,fxgBzh7gbIRS92Rkp-hifA
+
+---
+
+## License
+
+This project is provided as-is for evaluation purposes.
+
+**Project Version:** 1.0.0
+**Last Updated:** January 2026
+**Status:** Under Development
