@@ -75,20 +75,29 @@ public class TicketBookingService {
             try {
                 return attemptBookingWithOptimsticLock(userId, request);
             } catch (OptimisticLockingFailureException | StaleObjectStateException ex) {
-                if (attempt < MAX_RETRIES) {
-                    logger.warn("Optimistic lock failure (attempt {}/{}), retrying - userId: {}", attempt, MAX_RETRIES, userId);
-                    try {
-                        Thread.sleep(100L * attempt); //Exponential backoff
-                    } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
-                    }
-                } else {
-                    logger.error("Max retry attempts exceeded - userId: {}, showId: {}", userId, request.showId());
+                // Last attempt - fail immediately
+                if (attempt == MAX_RETRIES) {
+                    logger.error("Booking failed after {} attempts - userId: {}, showId: {}",
+                            MAX_RETRIES, userId, request.showId());
                     throw ex;
                 }
+
+                // Not last attempt - retry with exponential backoff
+                logger.warn("Optimistic lock conflict (attempt {}/{}), retrying - userId: {}", attempt, MAX_RETRIES, userId);
+                sleepWithBackoff(attempt);
             }
         }
-        throw new RuntimeException("Booking failed unexpectedly");
+        throw new IllegalStateException("Booking failed unexpectedly");
+    }
+
+
+    private void sleepWithBackoff(int attempt) {
+        try {
+            Thread.sleep(100L * attempt);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Retry interrupted", e);
+        }
     }
 
     /**
@@ -98,64 +107,105 @@ public class TicketBookingService {
      */
     private BookTicketResponse attemptBookingWithOptimsticLock(Long userId, BookTicketRequest request) {
         try {
-            Show show = showRepository.findById(request.showId())
-                    .orElseThrow(() -> new IllegalStateException("Show not found!"));
+            Show show = loadShow(request.showId());
+            User user = loadUser(userId);
 
-            User user = userRepository.findById(userId)
-                    .orElseThrow(() -> new IllegalStateException("User not found"));
-
-            List<SeatAvailability> availableSeats = seatAvailabilityRepository
-                    .findByShowIdAndSeatIdIn(request.showId(), request.seatIds());
-
-            if (availableSeats.size() != request.seatIds().size()) {
-                logger.warn("Seat count mismatch - userId: {}, requested: {}, found: {}",
-                        userId, request.seatIds().size(), availableSeats.size());
-                throw new IllegalStateException("Selected number of seats are not available!");
-            }
-
-            // Validate all the seats are AVAILABLE
-            for (SeatAvailability seat : availableSeats) {
-                if (seat.getSeatStatus() != SeatStatus.AVAILABLE) {
-                    logger.warn("Seat not available - userId: {}, seatId: {}, status: {}", userId, seat.getSeat().getId(), seat.getSeatStatus());
-                    throw new IllegalStateException("One or more seats are not vacant!");
-                }
-            }
-
+            List<SeatAvailability> availableSeats = loadAndValidateSeats(request, userId);
             logger.debug("All seats validated as available - userId: {}, count: {}", userId, availableSeats.size());
 
-            // Create new booking
-            Booking booking = new Booking();
-            booking.setBookedShow(show);
-            booking.setUser(user);
-            booking.setSeats(availableSeats);
-            booking.setBookingStatus(BookingStatus.CONFIRMED);
-            booking.setBookedAt(LocalDateTime.now());
+            Booking booking = createBooking(show, user, availableSeats);
+            markSeatsAsBooked(availableSeats, booking);
 
-            availableSeats.forEach(seat -> {
-                seat.setSeatStatus(SeatStatus.BOOKED);
-                seat.setUpdatedAt(LocalDateTime.now());
-                seat.setBooking(booking);
-            });
-
-            Booking savedBooking = bookingRepository.save(booking);
-            seatAvailabilityRepository.saveAll(availableSeats);
-
+            Booking savedBooking = saveBooking(booking, availableSeats);
             logger.info("Booking created successfully - bookingId: {}, userId: {}, version: {}", savedBooking.getId(), userId, savedBooking.getVersion());
-            return new BookTicketResponse(
-                    savedBooking.getId(),
-                    show.getId(),
-                    savedBooking.getSeats().stream().map(seat -> seat.getSeat().getId()).toList(),
-                    savedBooking.getBookedAt()
-            );
-        }catch (OptimisticLockException e) {
+
+            return buildBookingResponse(savedBooking);
+        } catch (OptimisticLockException e) {
             logger.warn("Booking failed due to seat conflict - userId: {}, retrying...", userId);
-            throw new IllegalStateException("Seat was just booked. Please select different seats.", e);
+            throw new SeatAlreadyBookedException("Seat was just booked. Please select different seats.", e);
         }
     }
 
 
+    private Show loadShow(Long showId) {
+        return showRepository.findById(showId)
+                .orElseThrow(() -> new ShowNotFoundException("Show not found: " + showId));
+    }
+
+    private User loadUser(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + userId));
+    }
+
+    private List<SeatAvailability> loadAndValidateSeats(BookTicketRequest request, Long userId) {
+        List<SeatAvailability> seats = seatAvailabilityRepository
+                .findByShowIdAndSeatIdIn(request.showId(), request.seatIds());
+
+        validateSeatCount(seats, request.seatIds().size(), userId);
+        validateSeatsAvailable(seats, userId);
+
+        logger.debug("All seats validated as available - userId: {}, count: {}", userId, seats.size());
+        return seats;
+    }
+
+    private void validateSeatCount(List<SeatAvailability> foundSeats, int requestedCount, Long userId) {
+        if (foundSeats.size() != requestedCount) {
+            logger.warn("Seat count mismatch - userId: {}, requested: {}, found: {}",
+                    userId, requestedCount, foundSeats.size());
+            throw new SeatNotFoundException("Selected number of seats are not available!");
+        }
+    }
+
+    private void validateSeatsAvailable(List<SeatAvailability> seats, Long userId) {
+        for (SeatAvailability seat : seats) {
+            if (seat.getSeatStatus() != SeatStatus.AVAILABLE) {
+                logger.warn("Seat not available - userId: {}, seatId: {}, status: {}",
+                        userId, seat.getSeat().getId(), seat.getSeatStatus());
+                throw new SeatNotAvailableException("One or more seats are not vacant!");
+            }
+        }
+    }
+
+    private Booking createBooking(Show show, User user, List<SeatAvailability> seats) {
+        Booking booking = new Booking();
+        booking.setBookedShow(show);
+        booking.setUser(user);
+        booking.setSeats(seats);
+        booking.setBookingStatus(BookingStatus.CONFIRMED);
+        booking.setBookedAt(LocalDateTime.now());
+        return booking;
+    }
+
+    private void markSeatsAsBooked(List<SeatAvailability> seats, Booking booking) {
+        seats.forEach(seat -> {
+            seat.setSeatStatus(SeatStatus.BOOKED);
+            seat.setUpdatedAt(LocalDateTime.now());
+            seat.setBooking(booking);
+        });
+    }
+
+    private Booking saveBooking(Booking booking, List<SeatAvailability> seats) {
+        Booking savedBooking = bookingRepository.save(booking);
+        seatAvailabilityRepository.saveAll(seats);
+        return savedBooking;
+    }
+
+    private BookTicketResponse buildBookingResponse(Booking booking) {
+        return new BookTicketResponse(
+                booking.getId(),
+                booking.getBookedShow().getId(),
+                booking.getSeats().stream()
+                        .map(seat -> seat.getSeat().getId())
+                        .toList(),
+                booking.getBookedAt()
+        );
+    }
+
+
+
+    /*** -- Pessimistic Locking --- ***/
     /**
-     * Lock and reserve seats for booking
+     * Lock and reserve seats for booking (for pessimistic locking)
      *
      * @param userId  User requesting the booking
      * @param request BookTicketRequest with details of the seat to be booked
@@ -195,7 +245,6 @@ public class TicketBookingService {
         logger.info("Seats locked and persisted - userId: {}, count: {}", userId, availableSeats.size());
         // Transaction commits here — LOCKED status now visible in DB
     }
-
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     private BookTicketResponse confirmAndBookSeats(Long userId, BookTicketRequest request) {
@@ -249,6 +298,37 @@ public class TicketBookingService {
             logger.error("Unexpected error while confirming booking - userId: {}, showId: {}",
                     userId, request.showId(), ex);
             throw ex;
+        }
+    }
+
+    // Custom exceptions for better error handling
+    public class ShowNotFoundException extends RuntimeException {
+        public ShowNotFoundException(String message) {
+            super(message);
+        }
+    }
+
+    public class UserNotFoundException extends RuntimeException {
+        public UserNotFoundException(String message) {
+            super(message);
+        }
+    }
+
+    public class SeatNotFoundException extends RuntimeException {
+        public SeatNotFoundException(String message) {
+            super(message);
+        }
+    }
+
+    public class SeatNotAvailableException extends RuntimeException {
+        public SeatNotAvailableException(String message) {
+            super(message);
+        }
+    }
+
+    public class SeatAlreadyBookedException extends RuntimeException {
+        public SeatAlreadyBookedException(String message, Throwable cause) {
+            super(message, cause);
         }
     }
 }

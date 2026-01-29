@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -46,23 +47,12 @@ public class MovieShowService {
             }
             logger.debug("Found {} shows for movieId: {} in city: {} on date: {}", showList.size(), movieId, city, date);
 
-            String movieName = showList.get(0).getMovie().getName();
+            String movieName = showList.get(0).getMovie().getName(); // Get movie name
 
             Map<Theatre, List<Show>> theatreShows = showList.stream().collect(Collectors.groupingBy(Show::getTheatre));
             logger.debug("Grouped shows by {} theatres", theatreShows.size());
 
-            List<TheatreShowDto> theatreShowDtos = theatreShows.entrySet().stream().map(entry -> {
-                Theatre theatre = entry.getKey(); //Theatre
-                logger.debug("Processing theatre: {} with {} shows", theatre.getTheatreName(), entry.getValue().size());
-
-                List<ShowTimeDto> showTimes = entry.getValue().stream().map(show -> new ShowTimeDto(show.getId(),
-                        show.getStartTime(),
-                        show.getEndTime())).collect(Collectors.toUnmodifiableList());
-
-                return new TheatreShowDto(theatre.getId(),
-                        theatre.getTheatreName(),
-                        showTimes);
-            }).toList();
+            List<TheatreShowDto> theatreShowDtos = buildTheatreShowDtos(theatreShows);
 
             return new MovieShowResponse(
                     movieId,
@@ -75,5 +65,26 @@ public class MovieShowService {
             logger.error("Error fetching movie shows for movieId: {}, city: {}, date: {}", movieId, city, date, ex);
             throw ex;
         }
+    }
+
+
+    private List<TheatreShowDto> buildTheatreShowDtos(Map<Theatre, List<Show>> theatreShows) {
+        List<TheatreShowDto> result = new ArrayList<>();
+
+        for (Map.Entry<Theatre, List<Show>> entry : theatreShows.entrySet()) {
+            Theatre theatre = entry.getKey();
+            List<Show> shows = entry.getValue();
+
+            logger.debug("Processing theatre: {} with {} shows",
+                    theatre.getTheatreName(), shows.size());
+
+            List<ShowTimeDto> showTimes = shows.stream()
+                    .map(show -> new ShowTimeDto(show.getId(), show.getStartTime(), show.getEndTime()))
+                    .toList();
+
+            result.add(new TheatreShowDto(theatre.getId(), theatre.getTheatreName(), showTimes));
+        }
+
+        return result;
     }
 }
