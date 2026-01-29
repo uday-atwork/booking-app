@@ -12,6 +12,7 @@ import com.booking.app.repository.SeatAvailabilityRepository;
 import com.booking.app.repository.SeatBookingRepository;
 import com.booking.app.repository.ShowRepository;
 import com.booking.app.repository.UserRepository;
+import jakarta.persistence.OptimisticLockException;
 import org.hibernate.StaleObjectStateException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -96,53 +97,60 @@ public class TicketBookingService {
      * @return
      */
     private BookTicketResponse attemptBookingWithOptimsticLock(Long userId, BookTicketRequest request) {
-        Show show = showRepository.findById(request.showId())
-                .orElseThrow(() -> new IllegalStateException("Show not found!"));
+        try {
+            Show show = showRepository.findById(request.showId())
+                    .orElseThrow(() -> new IllegalStateException("Show not found!"));
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalStateException("User not found"));
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new IllegalStateException("User not found"));
 
-        List<SeatAvailability> availableSeats = seatAvailabilityRepository
-                .findByShowIdAndSeatIdIn(request.showId(), request.seatIds());
+            List<SeatAvailability> availableSeats = seatAvailabilityRepository
+                    .findByShowIdAndSeatIdIn(request.showId(), request.seatIds());
 
-        if (availableSeats.size() != request.seatIds().size()) {
-            logger.warn("Seat count mismatch - userId: {}, requested: {}, found: {}",
-                    userId, request.seatIds().size(), availableSeats.size());
-            throw new IllegalStateException("Selected number of seats are not available!");
-        }
-
-        // Validate all the seats are AVAILABLE
-        for (SeatAvailability seat : availableSeats) {
-            if (seat.getSeatStatus() != SeatStatus.AVAILABLE) {
-                logger.warn("Seat not available - userId: {}, seatId: {}, status: {}", userId, seat.getSeat().getId(), seat.getSeatStatus());
-                throw new IllegalStateException("One or more seats are not vacant!");
+            if (availableSeats.size() != request.seatIds().size()) {
+                logger.warn("Seat count mismatch - userId: {}, requested: {}, found: {}",
+                        userId, request.seatIds().size(), availableSeats.size());
+                throw new IllegalStateException("Selected number of seats are not available!");
             }
+
+            // Validate all the seats are AVAILABLE
+            for (SeatAvailability seat : availableSeats) {
+                if (seat.getSeatStatus() != SeatStatus.AVAILABLE) {
+                    logger.warn("Seat not available - userId: {}, seatId: {}, status: {}", userId, seat.getSeat().getId(), seat.getSeatStatus());
+                    throw new IllegalStateException("One or more seats are not vacant!");
+                }
+            }
+
+            logger.debug("All seats validated as available - userId: {}, count: {}", userId, availableSeats.size());
+
+            // Create new booking
+            Booking booking = new Booking();
+            booking.setBookedShow(show);
+            booking.setUser(user);
+            booking.setSeats(availableSeats);
+            booking.setBookingStatus(BookingStatus.CONFIRMED);
+            booking.setBookedAt(LocalDateTime.now());
+
+            availableSeats.forEach(seat -> {
+                seat.setSeatStatus(SeatStatus.BOOKED);
+                seat.setUpdatedAt(LocalDateTime.now());
+                seat.setBooking(booking);
+            });
+
+            Booking savedBooking = bookingRepository.save(booking);
+            seatAvailabilityRepository.saveAll(availableSeats);
+
+            logger.info("Booking created successfully - bookingId: {}, userId: {}, version: {}", savedBooking.getId(), userId, savedBooking.getVersion());
+            return new BookTicketResponse(
+                    savedBooking.getId(),
+                    show.getId(),
+                    savedBooking.getSeats().stream().map(seat -> seat.getSeat().getId()).toList(),
+                    savedBooking.getBookedAt()
+            );
+        }catch (OptimisticLockException e) {
+            logger.warn("Booking failed due to seat conflict - userId: {}, retrying...", userId);
+            throw new IllegalStateException("Seat was just booked. Please select different seats.", e);
         }
-
-        logger.debug("All seats validated as available - userId: {}, count: {}", userId, availableSeats.size());
-
-        // Create new booking
-        Booking booking = new Booking();
-        booking.setBookedShow(show);
-        booking.setUser(user);
-        booking.setSeats(availableSeats);
-        booking.setBookingStatus(BookingStatus.CONFIRMED);
-        booking.setBookedAt(LocalDateTime.now());
-
-        availableSeats.forEach(seat -> {
-            seat.setSeatStatus(SeatStatus.BOOKED);
-            seat.setUpdatedAt(LocalDateTime.now());
-            seat.setBooking(booking);
-        });
-
-        Booking savedBooking = bookingRepository.save(booking); // Save to db
-        logger.info("Booking created successfully - bookingId: {}, userId: {}, version: {}", savedBooking.getId(), userId, savedBooking.getVersion());
-        return new BookTicketResponse(
-                savedBooking.getId(),
-                show.getId(),
-                savedBooking.getSeats().stream().map(seat -> seat.getSeat().getId()).toList(),
-                savedBooking.getBookedAt()
-        );
     }
 
 

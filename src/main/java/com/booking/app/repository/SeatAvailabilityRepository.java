@@ -9,6 +9,6 @@ import java.util.List;
 
 public interface SeatAvailabilityRepository extends JpaRepository<SeatAvailability, Long> {
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
+//    @Lock(LockModeType.PESSIMISTIC_WRITE)
     List<SeatAvailability> findByShowIdAndSeatIdIn(Long showId, List<Long> seatIds);
 }

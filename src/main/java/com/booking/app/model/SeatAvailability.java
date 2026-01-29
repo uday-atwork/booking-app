@@ -34,6 +34,10 @@ public class SeatAvailability {
     @JoinColumn(name = "booking_id")
     private Booking booking;
 
+    @Version
+    @Column(name = "version")
+    private Long version;
+
     public Long getId() {
         return id;
     }

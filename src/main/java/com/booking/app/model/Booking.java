@@ -15,9 +15,11 @@ public class Booking {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
     @Version
     @Column(name = "version")
     private Long version;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id")
     private User user;
@@ -28,14 +30,6 @@ public class Booking {
     private List<SeatAvailability> seats;
     @Enumerated(EnumType.STRING)
     private BookingStatus bookingStatus;
-
-    @PostLoad
-    protected void onPostLoad() {
-        // Initialize null version to 0 for existing records
-        if (version == null) {
-            version = 0L;
-        }
-    }
 
     public Long getId() {
         return id;

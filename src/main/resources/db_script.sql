@@ -50,23 +50,23 @@ INSERT INTO seat_availability (
     id,
     show_id,
     seat_id,
-    status
+    status, version
 )
 VALUES
     -- Show 1 (PVR Koramangala - 10 AM)
-    (1, 1, 1, 'AVAILABLE'),
-    (2, 1, 2, 'AVAILABLE'),
-    (3, 1, 3, 'BOOKED'),
+    (1, 1, 1, 'AVAILABLE', 0),
+    (2, 1, 2, 'AVAILABLE', 0),
+    (3, 1, 3, 'AVAILABLE', 0),
 
     -- Show 2 (PVR Koramangala - 6 PM)
-    (4, 2, 1, 'AVAILABLE'),
-    (5, 2, 2, 'LOCKED'),
-    (6, 2, 3, 'AVAILABLE'),
+    (4, 2, 1, 'AVAILABLE', 0),
+    (5, 2, 2, 'AVAILABLE', 0),
+    (6, 2, 3, 'AVAILABLE', 0),
 
     -- Show 3 (INOX Malleshwaram - 4 PM)
-    (7, 3, 4, 'AVAILABLE'),
-    (8, 3, 5, 'AVAILABLE'),
-    (9, 3, 6, 'AVAILABLE');
+    (7, 3, 4, 'AVAILABLE', 0),
+    (8, 3, 5, 'AVAILABLE',0 ),
+    (9, 3, 6, 'AVAILABLE', 0);
 
 
 INSERT INTO movie (id, name, release_date, duration)
